@@ -1,0 +1,58 @@
+// Script para baixar imagens Sentinel-2 identificando cenas
+var year = 2024;
+var startDate = ee.Date.fromYMD(year, 6, 1);
+var endDate = ee.Date.fromYMD(year, 7, 31);
+
+// Carregar a Colecao Sentinel-2 Topo da Atmosfera - L1C
+var image = ee.ImageCollection("COPERNICUS/S2")
+  .filterDate(startDate, endDate)
+  .filterBounds(table)
+  .map(function(image){return image.clip(table)})
+  .filter(ee.Filter.lt('CLOUDY_PIXEL_PERCENTAGE', 5));
+
+// Definir a  ROI (Region of Interest) para o limite do asset
+var roi = table;
+
+// Visualizar Sentinel-2 no map (Cor verdadeira)
+var visParams = {bands: ['B4', 'B3', 'B2'],
+  min: 0, max: 6000,gamma: 1.4};
+Map.addLayer(image.median().clip(roi),visParams,'Image');
+
+Map.centerObject(roi, 8);
+
+// Exportar Sentinel-2 para o Google Drive
+Export.image.toDrive({
+  image: image.median().clip(roi),
+  description: 'JuaraSentinel2',
+  folder:'Juara_Sentinel2',
+  scale: 10,
+  region: roi.geometry().bounds(),
+  maxPixels: 1e13,
+  crs: 'EPSG:32721'
+});
+  
+  // Função para obter o identificador de cena
+var getSceneId = function(image) {
+  var sceneId = image.get('system:index');
+  return ee.Feature(null, {'sceneId': sceneId});
+};
+
+// Aplicar a função a cada imagem na coleção
+var sceneIds = image.map(getSceneId);
+
+// Obter a lista de identificadores de cena
+var sceneIdList = sceneIds.aggregate_array('sceneId');
+
+// Converter a lista de identificadores de cena em uma string CSV
+var csvString = ee.List(sceneIdList);
+
+// Exportar a string CSV para o Google Drive
+Export.table.toDrive({
+  collection: ee.FeatureCollection(sceneIds),
+  description: 'Juara_ListadeCenas',
+  fileFormat: 'CSV',
+  selectors: ['sceneId']
+});
+
+// Imprimir a string CSV para referência
+print('String CSV:', csvString);
