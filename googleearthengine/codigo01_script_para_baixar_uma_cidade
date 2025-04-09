@@ -1,0 +1,32 @@
+// Script para baixar imagens Sentinel-2 no limite de uma cidade
+var year = 2024;
+var startDate = ee.Date.fromYMD(year, 6, 1);
+var endDate = ee.Date.fromYMD(year, 7, 31);
+
+// Carregar a Colecao Sentinel-2 Surface Reflectance - L2A
+var image = ee.ImageCollection("COPERNICUS/S2")
+  .filterDate(startDate, endDate)
+  .filterBounds(table)
+  .map(function(image){return image.clip(table)})
+  .filter(ee.Filter.lt('CLOUDY_PIXEL_PERCENTAGE', 5));
+
+// Definir a  ROI (Region of Interest) para o limite do Asset
+var roi = table;
+
+// Visualizar Sentinel-2 no map (Cores Verdadeiras)
+var visParams = {bands: ['B4', 'B3', 'B2'],
+  min: 0, max: 6000,gamma: 1.4};
+  
+Map.addLayer(image.median().clip(roi),visParams,'Image');
+
+Map.centerObject(roi, 8);
+
+// Exportar Sentinel-2 para o Google Drive
+Export.image.toDrive({
+  image: image.median().clip(roi),
+  description: 'Sentinel2_data',
+  folder:'GEE_Exports',
+  scale: 10,
+  region: roi.geometry().bounds(),
+  maxPixels: 1e13
+});
