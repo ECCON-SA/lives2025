@@ -1,0 +1,73 @@
+// Script para baixar imagens Sentinel-2 para uma cidade em 8-bit
+
+var year = 2024;
+var startDate = ee.Date.fromYMD(year, 6, 1);
+var endDate = ee.Date.fromYMD(year, 7, 31);
+
+// Carregar a Coleção Sentinel-2 Topo da Atmosfera - L1C
+var image = ee.ImageCollection("COPERNICUS/S2")
+  .filterDate(startDate, endDate)
+  .filterBounds(table)
+  .filter(ee.Filter.lt('CLOUDY_PIXEL_PERCENTAGE', 5))
+  .map(function(img) {
+    return img.clip(table);
+  });
+
+// Definir a ROI (Region of Interest)
+var roi = table;
+
+// Função para escalar bandas ópticas para 8-bit
+function to8Bit(image) {
+  return image.divide(10000).multiply(255).clamp(0, 255).toUint8();
+}
+
+// Aplicar a função na imagem de saída (mediana)
+var image8bit = to8Bit(image.median().clip(roi));
+
+// Visualizar Sentinel-2 no mapa (Cor verdadeira em 8-bit)
+var visParams8bit = {
+  bands: ['B4', 'B3', 'B2'], // RGB
+  min: 0,
+  max: 255,
+  gamma: 1.2
+};
+
+Map.addLayer(image8bit, visParams8bit, 'Image 8-bit');
+
+Map.centerObject(roi, 8);
+
+// Exportar Sentinel-2 8-bit para o Google Drive
+Export.image.toDrive({
+  image: image8bit,
+  description: 'JuaraSentinel2_8bit',
+  folder: 'Juara_Sentinel2',
+  scale: 10,
+  region: roi.geometry().bounds(),
+  maxPixels: 1e13,
+  crs: 'EPSG:32721'
+});
+
+// --- EXPORTAÇÃO DE LISTA DE CENAS ---
+
+// Função para obter o identificador de cena
+var getSceneId = function(img) {
+  var sceneId = img.get('system:index');
+  return ee.Feature(null, {'sceneId': sceneId});
+};
+
+// Aplicar a função a cada imagem na coleção
+var sceneIds = image.map(getSceneId);
+
+// Obter a lista de identificadores de cena
+var sceneIdList = sceneIds.aggregate_array('sceneId');
+
+// Exportar a string CSV para o Google Drive
+Export.table.toDrive({
+  collection: ee.FeatureCollection(sceneIds),
+  description: 'Juara_ListadeCenas',
+  fileFormat: 'CSV',
+  selectors: ['sceneId']
+});
+
+// Imprimir a string CSV para referência
+print('Lista de Cenas CSV:', sceneIdList);
